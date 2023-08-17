@@ -573,7 +573,8 @@ static inline void fromMsg(const pinocchio::ModelTpl<double, Options, JointColle
         std::to_string(tau.size()));
   }
   if (robot_configuration_data_msg.joint_angles.size() != static_cast<std::size_t>(njoints)) {
-    throw std::invalid_argument("Message incorrect - msg.joints size is " + std::to_string(robot_configuration_data_msg.joint_angles.size()) +
+    throw std::invalid_argument("Message incorrect - robot_configuration_data_msg.joint_angles size is " +
+        std::to_string(robot_configuration_data_msg.joint_angles.size()) +
         " but expected to be " + std::to_string(njoints));
   }
   t = robot_configuration_data_msg.monotonic_time;
