@@ -27,12 +27,15 @@
 #define JOINT_MODEL_COLLECTION ::pinocchio::JointCollectionDefaultTpl
 #include <pinocchio/bindings/python/pybind11-all.hpp>
 
+#include <rosidl_runtime_cpp/bounded_vector.hpp>
+
 #include "ihmc_msgs/msg/time_interval.hpp"
 #include "ihmc_msgs/msg/control.hpp"
 #include "ihmc_msgs/msg/feedback_gain.hpp"
 #include "ihmc_msgs/msg/state.hpp"
 #include "ihmc_msgs/msg/capturability_based_status.hpp"
 #include "ihmc_msgs/msg/robot_configuration_data.hpp"
+#include <geometry_msgs/msg/point.hpp>
 #include <whole_body_state_msgs/msg/whole_body_state.hpp>
 #include <whole_body_state_msgs/msg/whole_body_trajectory.hpp>
 
@@ -52,6 +55,7 @@ typedef ihmc_msgs::msg::Control Control;
 typedef ihmc_msgs::msg::FeedbackGain FeedbackGain;
 typedef ihmc_msgs::msg::RobotConfigurationData RobotConfigurationData;
 typedef ihmc_msgs::msg::CapturabilityBasedStatus CapturabilityBasedStatus;
+typedef geometry_msgs::msg::Point Point;
 typedef whole_body_state_msgs::msg::WholeBodyState WholeBodyState;
 typedef whole_body_state_msgs::msg::WholeBodyTrajectory WholeBodyTrajectory;
 typedef whole_body_state_msgs::msg::ContactState ContactState;
@@ -568,8 +572,8 @@ static inline void fromMsg(const pinocchio::ModelTpl<double, Options, JointColle
     throw std::invalid_argument("Expected tau to be " + std::to_string(njoints) + " but received " +
         std::to_string(tau.size()));
   }
-  if (msg.joints.size() != static_cast<std::size_t>(njoints)) {
-    throw std::invalid_argument("Message incorrect - msg.joints size is " + std::to_string(msg.joints.size()) +
+  if (robot_configuration_data_msg.joint_angles.size() != static_cast<std::size_t>(njoints)) {
+    throw std::invalid_argument("Message incorrect - msg.joints size is " + std::to_string(robot_configuration_data_msg.joint_angles.size()) +
         " but expected to be " + std::to_string(njoints));
   }
   t = robot_configuration_data_msg.monotonic_time;
@@ -610,9 +614,9 @@ static inline void fromMsg(const pinocchio::ModelTpl<double, Options, JointColle
   const std::size_t left_sole_id = model.getFrameId("LEFT_SOLE_LINK");
   const std::size_t right_sole_id = model.getFrameId("RIGHT_SOLE_LINK");
   if (left_sole_id == model.nframes)
-    throw std::invalid_argument("The LEFT_SOLE_LINK does not exist")
+    throw std::invalid_argument("The LEFT_SOLE_LINK does not exist");
   if (right_sole_id == model.nframes)
-    throw std::invalid_argument("The RIGHT_SOLE_LINK does not exist")
+    throw std::invalid_argument("The RIGHT_SOLE_LINK does not exist");
   pinocchio::forwardKinematics(model, data, q, v);
   pinocchio::updateFramePlacement(model, data, left_sole_id);
   pinocchio::updateFramePlacement(model, data, right_sole_id);
@@ -625,47 +629,39 @@ static inline void fromMsg(const pinocchio::ModelTpl<double, Options, JointColle
   pd["LEFT_SOLE_LINK"] = pinocchio::getFrameVelocity(model, data, left_sole_id, pinocchio::LOCAL_WORLD_ALIGNED);
   pd["RIGHT_SOLE_LINK"] = pinocchio::getFrameVelocity(model, data, right_sole_id, pinocchio::LOCAL_WORLD_ALIGNED);
 
-  // Contact wrench
-  f["LEFT_SOLE_LINK"] =
+  // Contact wrench TODO(james): we don't currently need to publish wrenches as they aren't used
+  // Left foot status TODO(james): not considering UNKNOWN or SLIPPING statuses yet
+  ContactStatus left_foot_status;
+  rosidl_runtime_cpp::BoundedVector<Point, 8> left_foot_support_polygon_3d = capturability_based_status_msg.left_foot_support_polygon_3d;
+  if (left_foot_support_polygon_3d.empty())
+    left_foot_status = ContactStatus::SEPARATION;
+  else
+    left_foot_status = ContactStatus::STICKING;
+  // Right foot status
+  ContactStatus right_foot_status;
+  rosidl_runtime_cpp::BoundedVector<Point, 8> right_foot_support_polygon_3d = capturability_based_status_msg.right_foot_support_polygon_3d;
+  if (right_foot_support_polygon_3d.empty())
+    right_foot_status = ContactStatus::SEPARATION;
+  else
+    right_foot_status = ContactStatus::STICKING;
 
+  // TODO(james): Only considering LOCOMOTION ContactType at the moment, no manipulation
   f["LEFT_SOLE_LINK"] = {
-      pinocchio::Force(Eigen::Vector3d(contact.wrench.force.x, contact.wrench.force.y, contact.wrench.force.z),
-                       Eigen::Vector3d(contact.wrench.torque.x, contact.wrench.torque.y, contact.wrench.torque.z)),
-      type, status};
-  for (const auto &contact : msg.contacts) {
-    // Contact wrench
-    ContactType type;
-    switch (contact.type) {
-      case ContactState::LOCOMOTION:
-        type = ContactType::LOCOMOTION;
-        break;
-      case ContactState::MANIPULATION:
-        type = ContactType::MANIPULATION;
-        break;
-    }
-    ContactStatus status;
-    switch (contact.status) {
-      case ContactState::UNKNOWN:
-        status = ContactStatus::UNKNOWN;
-        break;
-      case ContactState::INACTIVE:
-        status = ContactStatus::SEPARATION;
-        break;
-      case ContactState::ACTIVE:
-        status = ContactStatus::STICKING;
-        break;
-      case ContactState::SLIPPING:
-        status = ContactStatus::SLIPPING;
-        break;
-    }
-    f[contact.name] = {
-        pinocchio::Force(Eigen::Vector3d(contact.wrench.force.x, contact.wrench.force.y, contact.wrench.force.z),
-                         Eigen::Vector3d(contact.wrench.torque.x, contact.wrench.torque.y, contact.wrench.torque.z)),
-        type, status};
-    // Surface normal and friction coefficient
-    s[contact.name] = {Eigen::Vector3d(contact.surface_normal.x, contact.surface_normal.y, contact.surface_normal.z),
-                       contact.friction_coefficient};
-  }
+      pinocchio::Force(Eigen::Vector3d::Zero(), Eigen::Vector3d::Zero()),
+      ContactType::LOCOMOTION,
+      left_foot_status
+  };
+  f["RIGHT_SOLE_LINK"] = {
+      pinocchio::Force(Eigen::Vector3d::Zero(), Eigen::Vector3d::Zero()),
+      ContactType::LOCOMOTION,
+      right_foot_status
+  };
+
+  // Surface normals and friction coefficient
+  // TODO(james): Assuming flat ground for surface normals and 1.0 for friction coefficient (these are only used for
+  //  ROS-side visualisation
+  s["LEFT_SOLE_LINK"] = {Eigen::Vector3d(0.0, 0.0, 1.0), 1.0};
+  s["RIGHT_SOLE_LINK"] = {Eigen::Vector3d(0.0, 0.0, 1.0), 1.0};
 }
 
 }  // namespace ihmc_msgs
