@@ -601,13 +601,16 @@ static inline void fromMsg(const pinocchio::ModelTpl<double, Options, JointColle
   for (std::size_t j = 0; j < njoints; ++j) {
     // TODO(james): this is how URDF processing can affect the message. If the "first joint" is the first joint
     //  in the URDF and so on, we're fine
-    auto joint_id = model.getJointId(msg.joints[j].name);
-    auto q_idx = model.idx_qs[joint_id];
-    auto v_idx = model.idx_vs[joint_id];
-    q(q_idx) = robot_configuration_data_msg.joint_angles[j];
-    v(v_idx) = robot_configuration_data_msg.joint_velocities[j];
-    a(v_idx) = 0.0; // TODO(james): we don't have acceleration in our messages
-    tau(joint_id - 2) = robot_configuration_data_msg.joint_torques[j];
+    // TODO(james): figure out if it's easy or not to serialize the joint_name_hash we get in the RobotConfigurationData
+    //  message
+//    const int32_t hash = robot_configuration_data_msg.joint_name_hash;
+//    auto joint_id = model.getJointId(msg.joints[j].name);
+//    auto q_idx = model.idx_qs[joint_id];
+//    auto v_idx = model.idx_vs[joint_id];
+    q(7 + j) = robot_configuration_data_msg.joint_angles[j];
+    v(6 + j) = robot_configuration_data_msg.joint_velocities[j];
+    a(6 + j) = 0.0; // TODO(james): we don't have acceleration in our messages
+    tau(j) = robot_configuration_data_msg.joint_torques[j];
   }
   // Retrieve the contact information
   // TODO(james): this is where we would have LEFT_SOLE_LINK
