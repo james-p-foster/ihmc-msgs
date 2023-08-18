@@ -587,7 +587,7 @@ static inline void fromMsg(const pinocchio::ModelTpl<double, Options, JointColle
     q(4) = robot_configuration_data_msg.root_orientation.y;
     q(5) = robot_configuration_data_msg.root_orientation.z;
     q(6) = robot_configuration_data_msg.root_orientation.w;
-    // TODO(james): this is relative to the pelvis orientation with respect to world
+
     v(0) = robot_configuration_data_msg.pelvis_linear_velocity.x;
     v(1) = robot_configuration_data_msg.pelvis_linear_velocity.y;
     v(2) = robot_configuration_data_msg.pelvis_linear_velocity.z;
@@ -602,19 +602,12 @@ static inline void fromMsg(const pinocchio::ModelTpl<double, Options, JointColle
   for (std::size_t j = 0; j < njoints; ++j) {
     // TODO(james): this is how URDF processing can affect the message. If the "first joint" is the first joint
     //  in the URDF and so on, we're fine
-    // TODO(james): figure out if it's easy or not to serialize the joint_name_hash we get in the RobotConfigurationData
-    //  message
-//    const int32_t hash = robot_configuration_data_msg.joint_name_hash;
-//    auto joint_id = model.getJointId(msg.joints[j].name);
-//    auto q_idx = model.idx_qs[joint_id];
-//    auto v_idx = model.idx_vs[joint_id];
     q(7 + j) = robot_configuration_data_msg.joint_angles[j];
     v(6 + j) = robot_configuration_data_msg.joint_velocities[j];
-    a(6 + j) = 0.0; // TODO(james): we don't have acceleration in our messages
+    a(6 + j) = 0.0; // No acceleration field in RobotConfigurationData
     tau(j) = robot_configuration_data_msg.joint_torques[j];
   }
   // Retrieve the contact information
-  // TODO(james): this is where we would have LEFT_SOLE_LINK
   const std::size_t left_sole_id = model.getFrameId("LEFT_SOLE_LINK");
   const std::size_t right_sole_id = model.getFrameId("RIGHT_SOLE_LINK");
   if (left_sole_id == model.nframes)
