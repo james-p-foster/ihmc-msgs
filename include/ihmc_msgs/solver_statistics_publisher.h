@@ -47,6 +47,16 @@ class SolverStatisticsRosPublisher {
                const double ineqfeas) {
     if (pub_.trylock()) {
       pub_.msg_.header.stamp = node_.now();
+      pub_.msg_.iterations = iterations;
+      pub_.msg_.total_time = totaltime;
+      pub_.msg_.solve_time = solvetime;
+      pub_.msg_.cost = cost;
+      pub_.msg_.regularization = regularization;
+      pub_.msg_.step_length = steplength;
+      pub_.msg_.dynamic_feasibility = dynfeas;
+      pub_.msg_.equality_feasibility = equafeas;
+      pub_.msg_.inequality_feasibility = ineqfeas;
+      pub_.unlockAndPublish();
     }
   }
 
