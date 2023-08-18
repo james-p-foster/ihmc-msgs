@@ -36,6 +36,7 @@ class SolverStatisticsRosSubscriber {
     spinner_.add_node(node_);
     thread_ = std::thread([this]() { this->spin(); });
     thread_.detach();
+    std::cout << "Subscribe to SolverStatistics messages on " << topic << std::endl;
   }
   ~SolverStatisticsRosSubscriber() = default;
 

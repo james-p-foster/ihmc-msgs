@@ -15,13 +15,14 @@
 namespace ihmc_msgs {
 
 typedef const whole_body_state_msgs::msg::WholeBodyState::SharedPtr WholeBodyStateSharedPtr;
-typedef const ihmc_msgs::msg::RobotConfigurationData::SharedPtr RobotConfigurationDataSharedPtr;
-typedef const whole_body_state_msgs::msg::CapturabilityBasedStatus::SharedPtr CapturabilityBasedStatusSharedPtr;
+typedef const controller_msgs::msg::RobotConfigurationData::SharedPtr RobotConfigurationDataSharedPtr;
+typedef const controller_msgs::msg::CapturabilityBasedStatus::SharedPtr CapturabilityBasedStatusSharedPtr;
 
 class WholeBodyStateRosSubscriber {
  public:
   EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
+  // TODO(james): modify doc for the two new messages
   /**
    * @brief Initialize the whole-body state subscriber
    *
@@ -29,20 +30,24 @@ class WholeBodyStateRosSubscriber {
    * @param[in] topic  Topic name
    * @param[in] frame  Odometry frame
    */
-  WholeBodyStateRosSubscriber(pinocchio::Model &model, const std::string &topic = "/ihmc/whole_body_state",
+  WholeBodyStateRosSubscriber(pinocchio::Model &model,
+                              const std::string &robot_configuration_data_topic = "/ihmc/nadia/humanoid_control/output/robot_configuration_data",
+                              const std::string &capturability_based_status_topic = "/ihmc/nadia/humanoid_control/output/capturability_based_status",
                               const std::string &frame = "odom")
       : node_(rclcpp::Node::make_shared("whole_body_state_subscriber")),
         robot_configuration_data_sub_(node_->create_subscription<RobotConfigurationData>(
-            topic, 1, std::bind(&WholeBodyStateRosSubscriber::callback_robot_configuration_data, this, std::placeholders::_1))),
-        capturability_based_status_sub_(node_->create_subscription<RobotConfigurationData>(
-            topic, 1, std::bind(&WholeBodyStateRosSubscriber::callback_capturability_based_status, this, std::placeholders::_1))),
+            robot_configuration_data_topic, 1, std::bind(&WholeBodyStateRosSubscriber::callback_robot_configuration_data, this, std::placeholders::_1))),
+        capturability_based_status_sub_(node_->create_subscription<CapturabilityBasedStatus>(
+            capturability_based_status_topic, 1, std::bind(&WholeBodyStateRosSubscriber::callback_capturability_based_status, this, std::placeholders::_1))),
         t_(0.),
         q_(model.nq),
         v_(model.nv),
         a_(model.nv),
-        has_new_msg_(false),
+        has_new_robot_configuration_data_msg_(false),
+        has_new_capturability_based_status_msg_(false),
         is_processing_msg_(false),
-        last_msg_time_(0.),
+        last_robot_configuration_data_msg_id_(0),
+        last_capturability_based_status_msg_id_(0),
         odom_frame_(frame),
         model_(model),
         data_(model) {
@@ -50,14 +55,14 @@ class WholeBodyStateRosSubscriber {
     thread_ = std::thread([this]() { this->spin(); });
     thread_.detach();
 
-    const std::size_t root_joint_id = model.frames[1].parent;
-    const std::size_t nv_root = model.joints[root_joint_id].idx_q() == 0 ? model.joints[root_joint_id].nv() : 0;
+    const std::size_t nv_root = model.joints[1].idx_q() == 0 ? model.joints[1].nv() : 0;
     const std::size_t njoints = model.nv - nv_root;
     q_.setZero();
     v_.setZero();
     a_.setZero();
     tau_ = Eigen::VectorXd::Zero(njoints);
-    std::cout << "Subscribe to WholeBodyState messages on " << topic << std::endl;
+    std::cout << "Subscribe to RobotConfigurationData messages on " << robot_configuration_data_topic << std::endl;
+    std::cout << "Subscribe to CapturabilityBasedStatus messages on " << capturability_based_status_topic << std::endl;
   }
   ~WholeBodyStateRosSubscriber() = default;
 
@@ -95,7 +100,8 @@ class WholeBodyStateRosSubscriber {
     }
     // finish processing the message
     is_processing_msg_ = false;
-    has_new_msg_ = false;
+    has_new_robot_configuration_data_msg_ = false;
+    has_new_capturability_based_status_msg_ = false;
     return {t_, q_, v_, tau_, p_tmp_, pd_tmp_, f_tmp_, s_};
   }
 
@@ -236,7 +242,7 @@ class WholeBodyStateRosSubscriber {
   /**
    * @brief Indicate whether we have received a new message
    */
-  bool has_new_msg() const { return has_new_msg_; }
+  bool has_new_msg() const { return has_new_robot_configuration_data_msg_ && has_new_capturability_based_status_msg_; }
 
  private:
   std::shared_ptr<rclcpp::Node> node_;
@@ -258,11 +264,11 @@ class WholeBodyStateRosSubscriber {
   std::map<std::string, std::tuple<pinocchio::Force, ContactType, ContactStatus>>
       f_;                                                        //!< Contact force, type and status
   std::map<std::string, std::pair<Eigen::Vector3d, double>> s_;  //!< Contact surface and friction coefficient
-  bool has_new_msg_;                                             //!< Indcate when a new message has been received
-  bool is_processing_robot_configuration_data_msg_;                                       //!< Indicate when we are processing the message
-  bool is_processing_capturability_based_status_msg_;                                       //!< Indicate when we are processing the message
-  double last_robot_configuration_data_msg_time_;
-  double last_capturability_based_status_msg_time_;
+  bool has_new_robot_configuration_data_msg_;                                             //!< Indcate when a new message has been received
+  bool has_new_capturability_based_status_msg_;                                             //!< Indcate when a new message has been received
+  bool is_processing_msg_;                                       //!< Indicate when we are processing the message
+  std::size_t last_robot_configuration_data_msg_id_;
+  std::size_t last_capturability_based_status_msg_id_;
   std::string odom_frame_;
   pinocchio::Model model_;
   pinocchio::Data data_;
@@ -273,35 +279,35 @@ class WholeBodyStateRosSubscriber {
   std::map<std::string, std::tuple<Eigen::VectorXd, ContactType, ContactStatus>> f_tmp_;
 
   void callback_robot_configuration_data(RobotConfigurationDataSharedPtr msg) {
-    if (!is_processing_robot_configuration_data_msg_) {
-      double t = rclcpp::Time(msg->header.stamp).seconds();
+    if (!is_processing_msg_) {
+      const std::size_t sequence_id = msg->sequence_id;
       // Avoid out of order arrival and ensure each message is newer (or equal
       // to) than the preceeding:
-      if (last_robot_configuration_data_msg_time_ <= t) {
+      if (last_robot_configuration_data_msg_id_ <= sequence_id) {
         std::lock_guard<std::mutex> guard(mutex_);
         robot_configuration_data_msg_ = *msg;
-        has_new_msg_ = true;
-        last_robot_configuration_data_msg_time_ = t;
+        has_new_robot_configuration_data_msg_ = true;
+        last_robot_configuration_data_msg_id_ = sequence_id;
       } else {
-        RCLCPP_WARN_STREAM(node_->get_logger(), "Out of order message. Last timestamp: "
-                                                    << std::fixed << last_msg_time_ << ", current timestamp: " << t);
+        RCLCPP_WARN_STREAM(node_->get_logger(), "Out of order message. Last sequence ID: "
+          << std::fixed << last_robot_configuration_data_msg_id_ << ", current sequence ID: " << sequence_id);
       }
     }
   }
 
   void callback_capturability_based_status(CapturabilityBasedStatusSharedPtr msg) {
-    if (!is_processing_capturability_based_status_msg_) {
-      double t = rclcpp::Time(msg->header.stamp).seconds();
+    if (!is_processing_msg_) {
+      const std::size_t sequence_id = msg->sequence_id;
       // Avoid out of order arrival and ensure each message is newer (or equal
       // to) than the preceeding:
-      if (last_capturability_based_status_msg_time_ <= t) {
+      if (last_capturability_based_status_msg_id_ <= sequence_id) {
         std::lock_guard<std::mutex> guard(mutex_);
         capturability_based_status_msg_ = *msg;
-        has_new_msg_ = true;
-        last_capturability_based_status_msg_time_ = t;
+        has_new_capturability_based_status_msg_ = true;
+        last_capturability_based_status_msg_id_ = sequence_id;
       } else {
-        RCLCPP_WARN_STREAM(node_->get_logger(), "Out of order message. Last timestamp: "
-            << std::fixed << last_msg_time_ << ", current timestamp: " << t);
+        RCLCPP_WARN_STREAM(node_->get_logger(), "Out of order message. Last sequence ID: "
+          << std::fixed << last_capturability_based_status_msg_id_ << ", current sequence ID: " << sequence_id);
       }
     }
   }

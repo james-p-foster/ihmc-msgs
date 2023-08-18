@@ -140,8 +140,11 @@ PYBIND11_MODULE(crocoddyl_ros, m) {
 
   py::class_<WholeBodyStateRosSubscriber, std::unique_ptr<WholeBodyStateRosSubscriber, py::nodelete>>(
       m, "WholeBodyStateRosSubscriber")
-      .def(py::init<pinocchio::Model &, const std::string &, const std::string &>(), py::arg("model"),
-           py::arg("topic") = "/crocoddyl/whole_body_state", py::arg("frame") = "odom")
+      .def(py::init<pinocchio::Model &, const std::string &, const std::string &, const std::string &>(),
+          py::arg("model"),
+          py::arg("robot_configuration_data_topic") = "/ihmc/nadia/humanoid_control/output/robot_configuration_data",
+          py::arg("capturability_based_status_topic") = "/ihmc/nadia/humanoid_control/output/capturability_based_status",
+          py::arg("frame") = "odom")
       .def(py::init<pinocchio::Model &>(), py::arg("model"))
       .def("get_state", &WholeBodyStateRosSubscriber::get_state,
            "Get the latest whole-body state.\n\n"

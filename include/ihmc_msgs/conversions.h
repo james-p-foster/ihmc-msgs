@@ -33,8 +33,8 @@
 #include "ihmc_msgs/msg/control.hpp"
 #include "ihmc_msgs/msg/feedback_gain.hpp"
 #include "ihmc_msgs/msg/state.hpp"
-#include "ihmc_msgs/msg/capturability_based_status.hpp"
-#include "ihmc_msgs/msg/robot_configuration_data.hpp"
+#include <controller_msgs/msg/capturability_based_status.hpp>
+#include <controller_msgs/msg/robot_configuration_data.hpp>
 #include <geometry_msgs/msg/point.hpp>
 #include <whole_body_state_msgs/msg/whole_body_state.hpp>
 #include <whole_body_state_msgs/msg/whole_body_trajectory.hpp>
@@ -53,8 +53,8 @@ typedef ihmc_msgs::msg::TimeInterval TimeInterval;
 typedef ihmc_msgs::msg::State State;
 typedef ihmc_msgs::msg::Control Control;
 typedef ihmc_msgs::msg::FeedbackGain FeedbackGain;
-typedef ihmc_msgs::msg::RobotConfigurationData RobotConfigurationData;
-typedef ihmc_msgs::msg::CapturabilityBasedStatus CapturabilityBasedStatus;
+typedef controller_msgs::msg::RobotConfigurationData RobotConfigurationData;
+typedef controller_msgs::msg::CapturabilityBasedStatus CapturabilityBasedStatus;
 typedef geometry_msgs::msg::Point Point;
 typedef whole_body_state_msgs::msg::WholeBodyState WholeBodyState;
 typedef whole_body_state_msgs::msg::WholeBodyTrajectory WholeBodyTrajectory;
@@ -610,9 +610,9 @@ static inline void fromMsg(const pinocchio::ModelTpl<double, Options, JointColle
   // Retrieve the contact information
   const std::size_t left_sole_id = model.getFrameId("LEFT_SOLE_LINK");
   const std::size_t right_sole_id = model.getFrameId("RIGHT_SOLE_LINK");
-  if (left_sole_id == model.nframes)
+  if (left_sole_id == static_cast<std::size_t>(model.nframes))
     throw std::invalid_argument("The LEFT_SOLE_LINK does not exist");
-  if (right_sole_id == model.nframes)
+  if (right_sole_id == static_cast<std::size_t>(model.nframes))
     throw std::invalid_argument("The RIGHT_SOLE_LINK does not exist");
   pinocchio::forwardKinematics(model, data, q, v);
   pinocchio::updateFramePlacement(model, data, left_sole_id);

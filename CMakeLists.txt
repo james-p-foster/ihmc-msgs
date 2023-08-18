@@ -30,7 +30,7 @@ if(NOT CMAKE_CXX_STANDARD)
   set(CMAKE_CXX_STANDARD 14)
 endif()
 # Find ROS2 required packages
-set(PACKAGE_DEPENDENCIES rclcpp realtime_tools std_msgs geometry_msgs whole_body_state_msgs
+set(PACKAGE_DEPENDENCIES rclcpp realtime_tools std_msgs geometry_msgs whole_body_state_msgs controller_msgs
                          pybind11)
 find_package(ament_cmake REQUIRED)
 find_package(rosidl_default_generators REQUIRED)
@@ -40,10 +40,6 @@ endforeach()
 # Define messages to be generated
 rosidl_generate_interfaces(
   ${PROJECT_NAME}
-  "msg/CapturabilityBasedStatus.msg"
-  "msg/RobotConfigurationData.msg"
-  "msg/IMUPacket.msg"
-  "msg/SpatialVectorMessage.msg"
   "msg/Control.msg"
   "msg/FeedbackGain.msg"
   "msg/SolverStatistics.msg"
@@ -53,7 +49,8 @@ rosidl_generate_interfaces(
   DEPENDENCIES
   std_msgs
   geometry_msgs
-  whole_body_state_msgs)
+  whole_body_state_msgs
+  controller_msgs)
 # Add warning definitions
 if(APPLE AND ${pybind11_VERSION} VERSION_LESS "2.10.3")
   add_definitions(-DIHMC_MSG_DISABLE_PYBIND11_WARNINGS)
